@@ -2,21 +2,16 @@ import struct
 import spidev
 import time
 import RPi.GPIO as GPIO
+import sys
 
 # based on:
 #  - libs from github:
 #    - c++ https://github.com/adafruit/Adafruit-SSD1331-OLED-Driver-Library-for-Arduino
-#    - python
 #  - SSD1331 manual: https://www.adafruit.com/datasheets/SSD1331_1.2.pdf
-# Danger! many libs in python replicated this same bugs (ie: using normal gpio.out pin as CS pin, not dedicated to spi) 
-# or strange names (function changes 24bit color to 16bit named "color656" not "color565" )
+# Danger! many libs in python replicated this same bugs ( using normal gpio.out pin as CS pin, not dedicated to spi) 
 # 
-# stop using 'fake' CS pin (#23) and starting use SPI CE0 pin
-
 
 class SSD1331:
-    COMMAND = GPIO.LOW
-    DATA    = GPIO.HIGH
     SCREEN_WIDTH  = 0x5F # from 0 to real_width - 1
     SCREEN_HEIGHT = 0x3F
     
@@ -51,12 +46,13 @@ class SSD1331:
     CMD_VCOMH           = 0xBE
     CMD_CLEAR_WINDOW    = 0x25
     
+    
     def __init__(self, **kwargs):
         self.oled_res = kwargs.get('res_pin', 25)
         self.oled_dc = kwargs.get('dc_pin', 24)
         self.spi_bus = kwargs.get('spi_bus', 0)
         self.spi_device = kwargs.get('spi_device', 0)
-        
+        self.spi_speed = kwargs.get('spi_speed',6000000)
         #init:
         self.__init_gpio()
         self.__open_SPI() 
@@ -64,8 +60,10 @@ class SSD1331:
         self.__setup()
         self.clear()
         
+        
     def __exit__(self):
         self.remove()
+        
         
     def __init_gpio(self):
         GPIO.setmode(GPIO.BCM)
@@ -73,22 +71,22 @@ class SSD1331:
         GPIO.output(self.oled_dc, GPIO.LOW)
         GPIO.output(self.oled_res, GPIO.HIGH)
         
+        
     def __open_SPI(self):
         self.spi = spidev.SpiDev()
         self.spi.open(self.spi_bus, self.spi_device)
         self.spi.mode = 0b11
-        self.spi.max_speed_hz = 6000000
+        self.spi.max_speed_hz = self.spi_speed
+    
     
     def __reset_oled(self):
         self.spi.cshigh = True
-        self.spi.xfer([0])
         GPIO.output(self.oled_res, GPIO.LOW)
         time.sleep(0.5)
         GPIO.output(self.oled_res, GPIO.HIGH)
         time.sleep(0.5)
         self.spi.cshigh = False
-        self.spi.cshigh = False
-        self.spi.xfer([0])
+        
         
     def __setup(self):
         self.__write_command([self.CMD_DISPLAY_OFF])
@@ -112,55 +110,87 @@ class SSD1331:
         self.__write_command([self.CMD_CONTRAST_C, 0xFF])
         self.__write_command([self.CMD_DISPLAY_ON])
         
+        
+    def clear(self):
+        self.__write_command([self.CMD_CLEAR_WINDOW, 0x00, 0x00, self.SCREEN_WIDTH, self.SCREEN_HEIGHT])
+        
+        
     def remove(self):
         GPIO.cleanup()
         self.spi.close()
     
+    
+    def __write_command(self, cmd):
+        if not isinstance(cmd, (list, tuple)):
+            cmd = [cmd]
+        GPIO.output(self.oled_dc, GPIO.LOW)
+        self.spi.xfer(cmd)
+        
+        
+    def __write_data(self, data):
+        if not isinstance(data, (list, tuple)):
+            data = [data]
+        GPIO.output(self.oled_dc, GPIO.HIGH)
+        self.spi.xfer(data)
+    
+    
+    def __prepare_big_data(self, data_array):
+        init_size = sys.getsizeof(data_array)
+        if init_size < 4096:
+            return data_array
+        new_array = []
+        temp_array = []
+        for x in data_array:
+            temp_size = sys.getsizeof(temp_array) + sys.getsizeof(x)
+            if temp_size >= 4096:
+                 new_array.append(temp_array)
+                 temp_array = []
+            temp_array.append(x)
+        if temp_array:
+            new_array.append(temp_array)
+        return new_array
+    
+    
+    def write_many_pixels(self, x, y, data):
+        # after select_pixel you can send many pixel colors and it will be applay to next pixels
+        # its useful for write images (line by line) or fulscreen (x=0, y=0)
+        if self.select_pixel(x, y):
+            data = self.__prepare_big_data(data)
+            for small_part in data:
+                self.__write_data(small_part)
+    
+    
     def select_pixel(self, x, y):
-        if (x > self.SCREEN_WIDTH) or (y > self.SCREEN_HEIGHT):
+        if (x > self.SCREEN_WIDTH) or (y > self.SCREEN_HEIGHT) or (x < 0) or (y < 0):
             return False
         self.__write_command([self.CMD_SETCOLUMN, x, self.SCREEN_WIDTH, self.CMD_SETROW, y, self.SCREEN_HEIGHT])
         return True
-        
+    
+    
     def draw_pixel(self, x, y, color):
         if self.select_pixel(x, y):
             self.__write_data([(color >> 8) & 0xFF, color & 0xFF])
         
-    def draw_line(self, x0, y0, x1, y1, c):
-        # // Boundary check
-        # if ((y0 >= TFTHEIGHT) && (y1 >= TFTHEIGHT))
-        #   return;
-        # if ((x0 >= TFTWIDTH) && (x1 >= TFTWIDTH))
-        #   return;    
-        # if (x0 >= TFTWIDTH)
-        #   x0 = TFTWIDTH - 1;
-        # if (y0 >= TFTHEIGHT)
-        #   y0 = TFTHEIGHT - 1;
-        # if (x1 >= TFTWIDTH)
-        #   x1 = TFTWIDTH - 1;
-        # if (y1 >= TFTHEIGHT)
-        #   y1 = TFTHEIGHT - 1;
-        #    
-        # writeCommand(SSD1331_CMD_DRAWLINE);
-        # writeCommand(x0);
-        # writeCommand(y0);
-        # writeCommand(x1);
-        # writeCommand(y1);
-        # delay(SSD1331_DELAYS_HWLINE);  
-        # writeCommand((uint8_t)((color >> 11) << 1));
-        # writeCommand((uint8_t)((color >> 5) & 0x3F));
-        # #writeCommand((uint8_t)((color << 1) & 0x3F));
-        # delay(SSD1331_DELAYS_HWLINE); 
-        return
-    
-    def clear(self):
-        self.__write_command([self.CMD_CLEAR_WINDOW, 0x00, 0x00, 0x5F, 0x3F])
-    
-    def __write_command(self, cmd):
-        GPIO.output(self.oled_dc, GPIO.LOW)
-        self.spi.xfer(cmd)
         
-    def __write_data(self, data):
-        GPIO.output(self.oled_dc, GPIO.HIGH)
-        self.spi.xfer(data)
+    def draw_line(self, x0, y0, x1, y1, color):
+        if x0 > x1: x0, x1 = (x1, x0)
+        if y0 > y1: y0, y1 = (y1, y0)
         
+        if (x1 > self.SCREEN_WIDTH) or (y1 > self.SCREEN_HEIGHT) or (x0 < 0) or (y0 < 0):
+            return False
+        
+        self.__write_command([CMD_DRAWLINE, x0 & 0xFF, y0 & 0xFF, x1 & 0xFF, y1 & 0xFF])
+        #delay?
+        self.__write_command([(color >> 11) << 1, (color >> 5) & 0x3F, (color << 1) & 0x3F])
+        return True
+    
+    
+    def color565(self, r, g, b):
+        c = r >> 3;
+        c <<= 6;
+        c |= g >> 2;
+        c <<= 5;
+        c |= b >> 3;
+        return c;
+    
+    
