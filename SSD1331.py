@@ -10,10 +10,11 @@ import sys
 #  - SSD1331 manual: https://www.adafruit.com/datasheets/SSD1331_1.2.pdf
 # Danger! many libs in python replicated this same bugs ( using normal gpio.out pin as CS pin, not dedicated to spi) 
 # 
-
+SSD1331_SCREEN_WIDTH  = 0x5F # from 0 to real_width - 1
+SSD1331_SCREEN_HEIGHT = 0x3F
+    
 class SSD1331:
-    SCREEN_WIDTH  = 0x5F # from 0 to real_width - 1
-    SCREEN_HEIGHT = 0x3F
+
     
     # SSD1331 Commands
     CMD_DRAWLINE        = 0x21
@@ -112,7 +113,7 @@ class SSD1331:
         
         
     def clear(self):
-        self.__write_command([self.CMD_CLEAR_WINDOW, 0x00, 0x00, self.SCREEN_WIDTH, self.SCREEN_HEIGHT])
+        self.__write_command([self.CMD_CLEAR_WINDOW, 0x00, 0x00, SSD1331_SCREEN_WIDTH, SSD1331_SCREEN_HEIGHT])
         
         
     def remove(self):
@@ -151,21 +152,29 @@ class SSD1331:
         return new_array
     
     
-    def write_many_pixels(self, x, y, data):
-        # after select_pixel you can send many pixel colors and it will be applay to next pixels
-        # its useful for write images (line by line) or fulscreen (x=0, y=0)
-        if self.select_pixel(x, y):
+    def write_many_pixels(self, data, x0 = 0, y0 = 0, x1 = SSD1331_SCREEN_WIDTH, y1 = SSD1331_SCREEN_HEIGHT):
+        # after select_pixel_area you can send many pixel colors and it will be applay to next pixels
+        # its useful for write images (line by line or on entire screen)
+        if self.select_pixel_area(x0, y0, x1, y1):
             data = self.__prepare_big_data(data)
             for small_part in data:
                 self.__write_data(small_part)
     
     
     def select_pixel(self, x, y):
-        if (x > self.SCREEN_WIDTH) or (y > self.SCREEN_HEIGHT) or (x < 0) or (y < 0):
+        if (x > SSD1331_SCREEN_WIDTH) or (y > SSD1331_SCREEN_HEIGHT) or (x < 0) or (y < 0):
             return False
-        self.__write_command([self.CMD_SETCOLUMN, x, self.SCREEN_WIDTH, self.CMD_SETROW, y, self.SCREEN_HEIGHT])
+        self.__write_command([self.CMD_SETCOLUMN, x, x, self.CMD_SETROW, y, y])
         return True
     
+    def select_pixel_area(self, x0, y0, x1, y1):
+        if x0 > x1: x0, x1 = (x1, x0)
+        if y0 > y1: y0, y1 = (y1, y0)
+        
+        if (x1 > SSD1331_SCREEN_WIDTH) or (y1 > SSD1331_SCREEN_HEIGHT) or (x0 < 0) or (y0 < 0):
+            return False
+        self.__write_command([self.CMD_SETCOLUMN, x0, x1 , self.CMD_SETROW, y0, y1])
+        return True
     
     def draw_pixel(self, x, y, color):
         if self.select_pixel(x, y):
@@ -176,10 +185,10 @@ class SSD1331:
         if x0 > x1: x0, x1 = (x1, x0)
         if y0 > y1: y0, y1 = (y1, y0)
         
-        if (x1 > self.SCREEN_WIDTH) or (y1 > self.SCREEN_HEIGHT) or (x0 < 0) or (y0 < 0):
+        if (x1 > SSD1331_SCREEN_WIDTH) or (y1 > SSD1331_SCREEN_HEIGHT) or (x0 < 0) or (y0 < 0):
             return False
         
-        self.__write_command([CMD_DRAWLINE, x0 & 0xFF, y0 & 0xFF, x1 & 0xFF, y1 & 0xFF])
+        self.__write_command([self.CMD_DRAWLINE, x0 & 0xFF, y0 & 0xFF, x1 & 0xFF, y1 & 0xFF])
         #delay?
         self.__write_command([(color >> 11) << 1, (color >> 5) & 0x3F, (color << 1) & 0x3F])
         return True
