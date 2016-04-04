@@ -3,7 +3,7 @@ Lib for oled SSD1331 to use with Raspberry pi (testet on rpi3)
 
 ##Connection SSD1331 to RPI:
 ```
-SSD1331:				PI:
+SSD1331:		PI:
 VCC		<->		3,3V
 GDN		<->		GDN
 NC	  not connected!
