@@ -1,6 +1,7 @@
 import SSD1331
 import time
-from oledFontSupport.oledFontSupport import *
+
+
 device = SSD1331.SSD1331()
 
 def test(device):
