@@ -53,7 +53,7 @@ class SSD1331:
         self.oled_dc = kwargs.get('dc_pin', 24)
         self.spi_bus = kwargs.get('spi_bus', 0)
         self.spi_device = kwargs.get('spi_device', 0)
-        self.spi_speed = kwargs.get('spi_speed',6000000)
+        self.spi_speed = kwargs.get('spi_speed',16000000)#RPi spi max speed is 15,6 MHz(?)
         #init:
         self.__init_gpio()
         self.__open_SPI() 
@@ -176,6 +176,10 @@ class SSD1331:
         self.__write_command([self.CMD_SETCOLUMN, x0, x1 , self.CMD_SETROW, y0, y1])
         return True
     
+    def draw_pixel_line(self, data, x0 = 0, x1 = SSD1331_SCREEN_WIDTH, y = 0):
+        if self.select_pixel_area(x0, y, x1, y):
+            self.__write_data(data)
+            
     def draw_pixel(self, x, y, color):
         if self.select_pixel(x, y):
             self.__write_data([(color >> 8) & 0xFF, color & 0xFF])
