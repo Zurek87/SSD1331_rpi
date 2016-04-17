@@ -1,6 +1,6 @@
 import SSD1331
 import time
-
+import datetime
 
 device = SSD1331.SSD1331()
 
@@ -9,7 +9,7 @@ def test(device):
     rd, gd, bd = (1,1,1)
     arr = []
     for x in range(9000):
-        color = device.color565(r, g, b)
+        color = device.color565_fast(r, g, b)
         
         r +=1 * rd
         g +=2 * gd
@@ -26,6 +26,19 @@ def test(device):
         arr.extend([(color >> 8) & 0xFF, color & 0xFF])
         
     device.write_many_pixels(arr)
-    time.sleep(5)
+    #time.sleep(5)
+    
+    t = datetime.datetime.now()
+    arr = []
+    for x in range(900000):
+        color = device.color565_fast(r, g, b)
+    print datetime.datetime.now() - t
+    
+    t = datetime.datetime.now()
+    arr = []
+    for x in range(900000):
+        color = device.color565(r, g, b)
+    print datetime.datetime.now() - t
+    
 test(device)
 device.remove()

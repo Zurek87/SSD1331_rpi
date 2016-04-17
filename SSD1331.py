@@ -3,6 +3,7 @@ import spidev
 import time
 import RPi.GPIO as GPIO
 import sys
+import datetime
 
 # based on:
 #  - libs from github:
@@ -136,29 +137,29 @@ class SSD1331:
     
     
     def __prepare_big_data(self, data_array):
-        init_size = sys.getsizeof(data_array)
-        if init_size < 4096:
+        max_xfer = 4096
+        if len(data_array) < max_xfer:
             return data_array
         new_array = []
         temp_array = []
-        for x in data_array:
-            temp_size = sys.getsizeof(temp_array) + sys.getsizeof(x)
-            if temp_size >= 4096:
-                 new_array.append(temp_array)
-                 temp_array = []
-            temp_array.append(x)
-        if temp_array:
+        while len(data_array) > max_xfer:
+            temp_array = data_array[:max_xfer]
             new_array.append(temp_array)
+            data_array = data_array[max_xfer:]
+        if data_array:
+            new_array.append(data_array)
         return new_array
-    
     
     def write_many_pixels(self, data, x0 = 0, y0 = 0, x1 = SSD1331_SCREEN_WIDTH, y1 = SSD1331_SCREEN_HEIGHT):
         # after select_pixel_area you can send many pixel colors and it will be applay to next pixels
         # its useful for write images (line by line or on entire screen)
         if self.select_pixel_area(x0, y0, x1, y1):
-            data = self.__prepare_big_data(data)
-            for small_part in data:
-                self.__write_data(small_part)
+            if len(data) < 4096:
+                self.__write_data(data)
+            else:
+                data = self.__prepare_big_data(data)
+                for small_part in data:
+                    self.__write_data(small_part)
     
     
     def select_pixel(self, x, y):
@@ -204,6 +205,10 @@ class SSD1331:
         c |= g >> 2;
         c <<= 5;
         c |= b >> 3;
+        return c;
+    
+    def color565_fast(self, r, g, b):
+        c = ((r & 0xF8) << 8) + ((g & 0xFC) << 3) + (b >> 3)
         return c;
     
     
