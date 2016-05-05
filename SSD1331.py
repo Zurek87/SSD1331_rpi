@@ -16,7 +16,6 @@ SSD1331_SCREEN_HEIGHT = 0x3F
     
 class SSD1331:
 
-    
     # SSD1331 Commands
     CMD_DRAWLINE        = 0x21
     CMD_DRAWRECT        = 0x22
@@ -211,4 +210,9 @@ class SSD1331:
         c = ((r & 0xF8) << 8) + ((g & 0xFC) << 3) + (b >> 3)
         return c;
     
+    def get_height(self):
+        return SSD1331_SCREEN_HEIGHT + 1
+    
+    def get_width(self):
+        return SSD1331_SCREEN_WIDTH + 1
     
